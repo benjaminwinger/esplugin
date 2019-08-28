@@ -19,7 +19,7 @@
 use std::convert::TryInto;
 use std::io;
 use std::num::NonZeroU32;
-use std::string::FromUtf8Error;
+use std::str::Utf8Error;
 
 use nom::bytes::complete::take;
 use nom::combinator::{cond, map};
@@ -50,10 +50,6 @@ impl RecordHeader {
 
     pub fn flags(&self) -> u32 {
         self.flags
-    }
-
-    pub fn record_type(&self) -> Result<String, FromUtf8Error> {
-        String::from_utf8(self.record_type.to_vec())
     }
 }
 
@@ -223,6 +219,10 @@ impl Record {
 
     pub fn header_type(&self) -> RecordType {
         self.header.record_type
+    }
+
+    pub fn header_type_str(&self) -> Result<&str, Utf8Error> {
+        std::str::from_utf8(&self.header.record_type)
     }
 
     pub fn subrecords(&self) -> &[Subrecord] {
