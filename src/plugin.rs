@@ -117,11 +117,23 @@ impl Plugin {
         }
     }
 
-    pub fn parse(&mut self, input: &[u8], load_header_only: bool) -> Result<(), Error> {
+    pub fn parse(
+        &mut self,
+        input: &[u8],
+        load_header_only: bool,
+        store_all_records: bool,
+    ) -> Result<(), Error> {
         match self.filename() {
             None => Err(Error::NoFilename),
             Some(filename) => {
-                self.data = parse_plugin(input, self.game_id, &filename, load_header_only)?.1;
+                self.data = parse_plugin(
+                    input,
+                    self.game_id,
+                    &filename,
+                    load_header_only,
+                    store_all_records,
+                )?
+                .1;
 
                 Ok(())
             }
@@ -133,6 +145,7 @@ impl Plugin {
         mut reader: R,
         load_header_only: bool,
         expected_header_type: &'static [u8],
+        store_all_records: bool,
     ) -> Result<(), Error> {
         match self.filename() {
             None => Err(Error::NoFilename),
@@ -143,6 +156,7 @@ impl Plugin {
                     &filename,
                     load_header_only,
                     expected_header_type,
+                    store_all_records,
                 )?;
 
                 Ok(())
@@ -150,21 +164,35 @@ impl Plugin {
         }
     }
 
-    pub fn parse_open_file(&mut self, file: File, load_header_only: bool) -> Result<(), Error> {
+    pub fn parse_open_file(
+        &mut self,
+        file: File,
+        load_header_only: bool,
+        store_all_records: bool,
+    ) -> Result<(), Error> {
         let mut reader = BufReader::new(&file);
 
         if load_header_only {
             let content = Record::read_and_validate(&mut reader, self.game_id, self.header_type())?;
-            self.parse(&content, load_header_only)
+            self.parse(&content, load_header_only, store_all_records)
         } else {
-            self.read(reader, load_header_only, self.header_type())
+            self.read(
+                reader,
+                load_header_only,
+                self.header_type(),
+                store_all_records,
+            )
         }
     }
 
-    pub fn parse_file(&mut self, load_header_only: bool) -> Result<(), Error> {
+    pub fn parse_file(
+        &mut self,
+        load_header_only: bool,
+        store_all_records: bool,
+    ) -> Result<(), Error> {
         let file = File::open(&self.path)?;
 
-        self.parse_open_file(file, load_header_only)
+        self.parse_open_file(file, load_header_only, store_all_records)
     }
 
     pub fn game_id(&self) -> &GameId {
@@ -228,10 +256,17 @@ impl Plugin {
         }
     }
 
-    pub fn is_valid(game_id: GameId, filepath: &Path, load_header_only: bool) -> bool {
+    pub fn is_valid(
+        game_id: GameId,
+        filepath: &Path,
+        load_header_only: bool,
+        store_all_records: bool,
+    ) -> bool {
         let mut plugin = Plugin::new(game_id, &filepath.to_path_buf());
 
-        plugin.parse_file(load_header_only).is_ok()
+        plugin
+            .parse_file(load_header_only, store_all_records)
+            .is_ok()
     }
 
     pub fn description(&self) -> Result<Option<String>, Error> {
@@ -594,6 +629,7 @@ fn parse_plugin<'a>(
     game_id: GameId,
     filename: &str,
     load_header_only: bool,
+    store_all_records: bool,
 ) -> IResult<&'a [u8], PluginData> {
     let (input1, header_record) = Record::parse(input, game_id, false)?;
 
@@ -608,7 +644,7 @@ fn parse_plugin<'a>(
         ));
     }
 
-    let (input2, entries, record_ids) = if game_id == GameId::Morrowind {
+    let (input2, entries, record_ids) = if game_id == GameId::Morrowind && store_all_records {
         let (input2, entries) = parse_entries(input1, game_id)?;
         let record_ids = parse_record_ids_from_entries(game_id, &entries);
         (input2, entries, record_ids)
@@ -633,6 +669,7 @@ fn read_plugin<R: BufRead + Seek>(
     filename: &str,
     load_header_only: bool,
     expected_header_type: &'static [u8],
+    store_all_records: bool,
 ) -> Result<PluginData, Error> {
     let header_record = Record::read(reader, game_id, false)?;
 
@@ -651,7 +688,7 @@ fn read_plugin<R: BufRead + Seek>(
         });
     }
 
-    let (entries, record_ids) = if game_id == GameId::Morrowind {
+    let (entries, record_ids) = if game_id == GameId::Morrowind && store_all_records {
         let entries = read_entries(reader, game_id)?;
         let record_ids = parse_record_ids_from_entries(game_id, &entries);
         (entries, record_ids)
@@ -684,7 +721,7 @@ mod tests {
                 Path::new("testing-plugins/Morrowind/Data Files/Blank.esm"),
             );
 
-            assert!(plugin.parse_file(false).is_ok());
+            assert!(plugin.parse_file(false, false).is_ok());
 
             match plugin.data.record_ids {
                 RecordIds::NamespacedIds(ids) => assert_eq!(10, ids.len()),
@@ -699,7 +736,7 @@ mod tests {
                 Path::new("testing-plugins/Morrowind/Data Files/Blank.esm"),
             );
 
-            assert!(plugin.parse_file(false).is_ok());
+            assert!(plugin.parse_file(false, false).is_ok());
 
             match plugin.data.record_ids {
                 RecordIds::NamespacedIds(ids) => {
@@ -717,7 +754,7 @@ mod tests {
                 Path::new("testing-plugins/Skyrim/Data/Blank.esm"),
             );
 
-            assert!(plugin.parse_file(true).is_ok());
+            assert!(plugin.parse_file(true, false).is_ok());
 
             assert_eq!(RecordIds::None, plugin.data.record_ids);
         }
@@ -739,7 +776,7 @@ mod tests {
                 ),
             );
 
-            assert!(plugin.parse_file(true).is_ok());
+            assert!(plugin.parse_file(true, false).is_ok());
             assert!(plugin.is_master_file());
         }
 
@@ -770,7 +807,7 @@ mod tests {
                 ),
             );
 
-            assert!(plugin.parse_file(true).is_ok());
+            assert!(plugin.parse_file(true, false).is_ok());
             assert!(!plugin.is_master_file());
         }
 
@@ -791,7 +828,7 @@ mod tests {
                 Path::new("testing-plugins/Morrowind/Data Files/Blank.esm"),
             );
 
-            assert!(plugin.parse_file(true).is_ok());
+            assert!(plugin.parse_file(true, false).is_ok());
 
             let expected_description = format!("{:\0<218}{:\0<38}\n\0\0", "v5.0", "\r");
             assert_eq!(expected_description, plugin.description().unwrap().unwrap());
@@ -804,7 +841,7 @@ mod tests {
                 Path::new("testing-plugins/Morrowind/Data Files/Blank.esm"),
             );
 
-            assert!(plugin.parse_file(true).is_ok());
+            assert!(plugin.parse_file(true, false).is_ok());
 
             assert_eq!(1.2, plugin.header_version().unwrap());
         }
@@ -817,7 +854,7 @@ mod tests {
             );
 
             assert!(plugin.record_and_group_count().is_none());
-            assert!(plugin.parse_file(true).is_ok());
+            assert!(plugin.parse_file(true, false).is_ok());
             assert_eq!(10, plugin.record_and_group_count().unwrap());
         }
 
@@ -829,7 +866,7 @@ mod tests {
             );
 
             assert!(plugin.record_and_group_count().is_none());
-            assert!(plugin.parse_file(false).is_ok());
+            assert!(plugin.parse_file(false, false).is_ok());
             assert_eq!(10, plugin.record_and_group_count().unwrap());
             match plugin.data.record_ids {
                 RecordIds::NamespacedIds(ids) => assert_eq!(10, ids.len()),
@@ -844,7 +881,7 @@ mod tests {
                 Path::new("testing-plugins/Morrowind/Data Files/Blank - Master Dependent.esm"),
             );
 
-            assert!(plugin.parse_file(false).is_ok());
+            assert!(plugin.parse_file(false, false).is_ok());
             assert_eq!(0, plugin.count_override_records());
         }
 
@@ -859,8 +896,8 @@ mod tests {
                 Path::new("testing-plugins/Morrowind/Data Files/Blank - Different.esm"),
             );
 
-            assert!(plugin1.parse_file(false).is_ok());
-            assert!(plugin2.parse_file(false).is_ok());
+            assert!(plugin1.parse_file(false, false).is_ok());
+            assert!(plugin2.parse_file(false, false).is_ok());
 
             assert!(plugin1.overlaps_with(&plugin1));
             assert!(!plugin1.overlaps_with(&plugin2));
@@ -951,7 +988,7 @@ mod tests {
                 GameId::Morrowind,
                 Path::new("testing-plugins/Morrowind/Data Files/Blank - Master Dependent.esm"),
             );
-            assert!(plugin.parse_file(false).is_ok());
+            assert!(plugin.parse_file(false, false).is_ok());
             assert!(!plugin.is_valid_as_light_master());
         }
     }
@@ -976,7 +1013,7 @@ mod tests {
                 Path::new("testing-plugins/Oblivion/Data/Blank.esm"),
             );
 
-            assert!(plugin.parse_file(true).is_ok());
+            assert!(plugin.parse_file(true, false).is_ok());
 
             assert_eq!(0.8, plugin.header_version().unwrap());
         }
@@ -987,7 +1024,7 @@ mod tests {
                 GameId::Oblivion,
                 Path::new("testing-plugins/Oblivion/Data/Blank - Master Dependent.esm"),
             );
-            assert!(plugin.parse_file(false).is_ok());
+            assert!(plugin.parse_file(false, false).is_ok());
             assert!(!plugin.is_valid_as_light_master());
         }
     }
@@ -1002,7 +1039,7 @@ mod tests {
                 Path::new("testing-plugins/Skyrim/Data/Blank.esm"),
             );
 
-            assert!(plugin.parse_file(false).is_ok());
+            assert!(plugin.parse_file(false, false).is_ok());
 
             match plugin.data.record_ids {
                 RecordIds::FormIds(ids) => assert_eq!(10, ids.len()),
@@ -1017,7 +1054,7 @@ mod tests {
                 Path::new("testing-plugins/Skyrim/Data/Blank.esm"),
             );
 
-            assert!(plugin.parse_file(true).is_ok());
+            assert!(plugin.parse_file(true, false).is_ok());
 
             assert_eq!(RecordIds::None, plugin.data.record_ids);
         }
@@ -1036,7 +1073,7 @@ mod tests {
                 Path::new("testing-plugins/Skyrim/Data/Blank.esm"),
             );
 
-            assert!(plugin.parse_file(true).is_ok());
+            assert!(plugin.parse_file(true, false).is_ok());
             assert!(plugin.is_master_file());
         }
 
@@ -1047,7 +1084,7 @@ mod tests {
                 Path::new("testing-plugins/Skyrim/Data/Blank.esp"),
             );
 
-            assert!(plugin.parse_file(true).is_ok());
+            assert!(plugin.parse_file(true, false).is_ok());
             assert!(!plugin.is_master_file());
         }
 
@@ -1068,7 +1105,7 @@ mod tests {
                 Path::new("testing-plugins/Skyrim/Data/Blank.esm"),
             );
 
-            assert!(plugin.parse_file(true).is_ok());
+            assert!(plugin.parse_file(true, false).is_ok());
             assert_eq!("v5.0", plugin.description().unwrap().unwrap());
 
             let mut plugin = Plugin::new(
@@ -1076,7 +1113,7 @@ mod tests {
                 Path::new("testing-plugins/Skyrim/Data/Blank.esp"),
             );
 
-            assert!(plugin.parse_file(true).is_ok());
+            assert!(plugin.parse_file(true, false).is_ok());
             assert_eq!("€ƒŠ", plugin.description().unwrap().unwrap());
 
             let mut plugin = Plugin::new(
@@ -1087,7 +1124,7 @@ mod tests {
                 ),
             );
 
-            assert!(plugin.parse_file(true).is_ok());
+            assert!(plugin.parse_file(true, false).is_ok());
             assert_eq!("", plugin.description().unwrap().unwrap());
         }
 
@@ -1098,7 +1135,7 @@ mod tests {
                 Path::new("testing-plugins/Skyrim/Data/Blank.esm"),
             );
 
-            assert!(plugin.parse_file(true).is_ok());
+            assert!(plugin.parse_file(true, false).is_ok());
 
             assert_eq!(0.94, plugin.header_version().unwrap());
         }
@@ -1111,7 +1148,7 @@ mod tests {
             );
 
             assert!(plugin.record_and_group_count().is_none());
-            assert!(plugin.parse_file(true).is_ok());
+            assert!(plugin.parse_file(true, false).is_ok());
             assert_eq!(15, plugin.record_and_group_count().unwrap());
         }
 
@@ -1122,7 +1159,7 @@ mod tests {
                 Path::new("testing-plugins/Skyrim/Data/Blank - Different Master Dependent.esp"),
             );
 
-            assert!(plugin.parse_file(false).is_ok());
+            assert!(plugin.parse_file(false, false).is_ok());
             assert_eq!(2, plugin.count_override_records());
         }
 
@@ -1137,8 +1174,8 @@ mod tests {
                 Path::new("testing-plugins/Skyrim/Data/Blank - Different.esm"),
             );
 
-            assert!(plugin1.parse_file(false).is_ok());
-            assert!(plugin2.parse_file(false).is_ok());
+            assert!(plugin1.parse_file(false, false).is_ok());
+            assert!(plugin2.parse_file(false, false).is_ok());
 
             assert!(plugin1.overlaps_with(&plugin1));
             assert!(!plugin1.overlaps_with(&plugin2));
@@ -1229,7 +1266,7 @@ mod tests {
                 GameId::Skyrim,
                 Path::new("testing-plugins/Skyrim/Data/Blank - Master Dependent.esm"),
             );
-            assert!(plugin.parse_file(false).is_ok());
+            assert!(plugin.parse_file(false, false).is_ok());
             assert!(!plugin.is_valid_as_light_master());
         }
     }
@@ -1261,14 +1298,14 @@ mod tests {
                 GameId::SkyrimSE,
                 Path::new("testing-plugins/Skyrim/Data/Blank.esp"),
             );
-            assert!(plugin.parse_file(true).is_ok());
+            assert!(plugin.parse_file(true, false).is_ok());
             assert!(!plugin.is_master_file());
 
             let mut plugin = Plugin::new(
                 GameId::SkyrimSE,
                 Path::new("testing-plugins/Skyrim/Data/Blank.esm.esp"),
             );
-            assert!(plugin.parse_file(true).is_ok());
+            assert!(plugin.parse_file(true, false).is_ok());
             assert!(plugin.is_master_file());
         }
 
@@ -1301,7 +1338,7 @@ mod tests {
                 GameId::SkyrimSE,
                 Path::new("testing-plugins/SkyrimSE/Data/Blank.esl.esp"),
             );
-            assert!(plugin.parse_file(true).is_ok());
+            assert!(plugin.parse_file(true, false).is_ok());
             assert!(plugin.is_light_master_file());
             assert!(!plugin.is_master_file());
         }
@@ -1319,7 +1356,7 @@ mod tests {
                 GameId::SkyrimSE,
                 Path::new("testing-plugins/SkyrimSE/Data/Blank.esl.esm"),
             );
-            assert!(plugin.parse_file(true).is_ok());
+            assert!(plugin.parse_file(true, false).is_ok());
             assert!(plugin.is_light_master_file());
             assert!(plugin.is_master_file());
         }
@@ -1331,7 +1368,7 @@ mod tests {
                 Path::new("testing-plugins/SkyrimSE/Data/Blank.esm"),
             );
 
-            assert!(plugin.parse_file(true).is_ok());
+            assert!(plugin.parse_file(true, false).is_ok());
 
             assert_eq!(0.94, plugin.header_version().unwrap());
         }
@@ -1343,7 +1380,7 @@ mod tests {
                 GameId::SkyrimSE,
                 Path::new("testing-plugins/SkyrimSE/Data/Blank - Master Dependent.esm"),
             );
-            assert!(plugin.parse_file(false).is_ok());
+            assert!(plugin.parse_file(false, false).is_ok());
 
             assert!(plugin.is_valid_as_light_master());
         }
@@ -1362,7 +1399,7 @@ mod tests {
             bytes[0x7A] = 0xFF;
             bytes[0x7B] = 0x07;
 
-            assert!(plugin.parse(&bytes, false).is_ok());
+            assert!(plugin.parse(&bytes, false, false).is_ok());
 
             assert!(plugin.is_valid_as_light_master());
         }
@@ -1381,7 +1418,7 @@ mod tests {
             bytes[0x386] = 0xFF;
             bytes[0x387] = 0x07;
 
-            assert!(plugin.parse(&bytes, false).is_ok());
+            assert!(plugin.parse(&bytes, false, false).is_ok());
 
             assert!(!plugin.is_valid_as_light_master());
         }
@@ -1400,7 +1437,7 @@ mod tests {
             bytes[0x386] = 0x00;
             bytes[0x387] = 0x10;
 
-            assert!(plugin.parse(&bytes, false).is_ok());
+            assert!(plugin.parse(&bytes, false, false).is_ok());
 
             assert!(!plugin.is_valid_as_light_master());
         }
@@ -1425,7 +1462,7 @@ mod tests {
                 GameId::Fallout3,
                 Path::new("testing-plugins/Skyrim/Data/Blank - Master Dependent.esm"),
             );
-            assert!(plugin.parse_file(false).is_ok());
+            assert!(plugin.parse_file(false, false).is_ok());
             assert!(!plugin.is_valid_as_light_master());
         }
     }
@@ -1449,7 +1486,7 @@ mod tests {
                 GameId::FalloutNV,
                 Path::new("testing-plugins/Skyrim/Data/Blank - Master Dependent.esm"),
             );
-            assert!(plugin.parse_file(false).is_ok());
+            assert!(plugin.parse_file(false, false).is_ok());
             assert!(!plugin.is_valid_as_light_master());
         }
     }
@@ -1479,14 +1516,14 @@ mod tests {
                 GameId::Fallout4,
                 Path::new("testing-plugins/Skyrim/Data/Blank.esp"),
             );
-            assert!(plugin.parse_file(true).is_ok());
+            assert!(plugin.parse_file(true, false).is_ok());
             assert!(!plugin.is_master_file());
 
             let mut plugin = Plugin::new(
                 GameId::Fallout4,
                 Path::new("testing-plugins/Skyrim/Data/Blank.esm.esp"),
             );
-            assert!(plugin.parse_file(true).is_ok());
+            assert!(plugin.parse_file(true, false).is_ok());
             assert!(plugin.is_master_file());
         }
 
@@ -1513,7 +1550,7 @@ mod tests {
                 GameId::Fallout4,
                 Path::new("testing-plugins/SkyrimSE/Data/Blank - Master Dependent.esm"),
             );
-            assert!(plugin.parse_file(false).is_ok());
+            assert!(plugin.parse_file(false, false).is_ok());
 
             assert!(plugin.is_valid_as_light_master());
         }
@@ -1530,14 +1567,14 @@ mod tests {
     fn parse_file_should_error_if_plugin_does_not_exist() {
         let mut plugin = Plugin::new(GameId::Skyrim, Path::new("Blank.esm"));
 
-        assert!(plugin.parse_file(false).is_err());
+        assert!(plugin.parse_file(false, false).is_err());
     }
 
     #[test]
     fn parse_file_should_error_if_plugin_is_not_valid() {
         let mut plugin = Plugin::new(GameId::Skyrim, Path::new("README.md"));
 
-        let result = plugin.parse_file(false);
+        let result = plugin.parse_file(false, false);
         assert!(result.is_err());
         assert_eq!(
             "failed to fill whole buffer",
@@ -1554,7 +1591,7 @@ mod tests {
             Path::new("testing-plugins/Skyrim/Data/Invalid.esm"),
         );
 
-        let result = plugin.parse_file(true);
+        let result = plugin.parse_file(true, false);
         assert!(result.is_err());
         assert_eq!("An error was encountered while parsing the plugin content [00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00, 00]: Expected record type [54, 45, 53, 34]", result.unwrap_err().to_string());
     }
@@ -1568,7 +1605,7 @@ mod tests {
             Path::new("testing-plugins/Skyrim/Data/Invalid.esm"),
         );
 
-        let result = plugin.parse_file(false);
+        let result = plugin.parse_file(false, false);
         assert!(result.is_err());
         assert_eq!("An error was encountered while parsing the plugin content [00, 00, 00, 00]: Expected record type [54, 45, 53, 34]", result.unwrap_err().to_string());
     }
@@ -1579,6 +1616,7 @@ mod tests {
             GameId::Skyrim,
             Path::new("testing-plugins/Skyrim/Data/Blank.esm"),
             true,
+            false,
         );
 
         assert!(is_valid);
@@ -1586,7 +1624,7 @@ mod tests {
 
     #[test]
     fn is_valid_should_return_false_for_an_invalid_plugin() {
-        let is_valid = Plugin::is_valid(GameId::Skyrim, Path::new("README.md"), true);
+        let is_valid = Plugin::is_valid(GameId::Skyrim, Path::new("README.md"), true, false);
 
         assert!(!is_valid);
     }
@@ -1624,7 +1662,7 @@ mod tests {
             Path::new("testing-plugins/Skyrim/Data/Blank.esm"),
         );
 
-        assert!(plugin.parse_file(true).is_ok());
+        assert!(plugin.parse_file(true, false).is_ok());
         assert_eq!(0, plugin.masters().unwrap().len());
     }
 
@@ -1638,7 +1676,7 @@ mod tests {
             ),
         );
 
-        assert!(plugin.parse_file(true).is_ok());
+        assert!(plugin.parse_file(true, false).is_ok());
 
         let masters = plugin.masters().unwrap();
         assert_eq!(1, masters.len());
@@ -1659,7 +1697,7 @@ mod tests {
         data[0x14] = 8;
         data[0x15] = 0;
 
-        assert!(plugin.parse(&data, true).is_ok());
+        assert!(plugin.parse(&data, true, false).is_ok());
 
         let result = plugin.description();
         assert!(result.is_err());
@@ -1680,7 +1718,7 @@ mod tests {
         data[0x14] = 3;
         data[0x15] = 0;
 
-        assert!(plugin.parse(&data, true).is_ok());
+        assert!(plugin.parse(&data, true, false).is_ok());
         assert!(plugin.header_version().is_none());
     }
 
@@ -1696,7 +1734,7 @@ mod tests {
         data[0x04] = 0x30;
         data[0x14] = 0x28;
 
-        assert!(plugin.parse(&data, true).is_ok());
+        assert!(plugin.parse(&data, true, false).is_ok());
         assert!(plugin.record_and_group_count().is_none());
     }
 
