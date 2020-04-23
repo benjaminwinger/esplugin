@@ -885,8 +885,8 @@ mod tests {
                 Path::new("testing-plugins/Morrowind/Data Files/Blank - Master Dependent.esm"),
             );
 
-            assert!(plugin1.parse_file(false).is_ok());
-            assert!(plugin2.parse_file(false).is_ok());
+            assert!(plugin1.parse_file(ParseMode::RecordIds).is_ok());
+            assert!(plugin2.parse_file(ParseMode::RecordIds).is_ok());
 
             assert_eq!(4, plugin1.overlap_size(&[&plugin2, &plugin2]));
         }
@@ -906,9 +906,9 @@ mod tests {
                 Path::new("testing-plugins/Morrowind/Data Files/Blank - Master Dependent.esm"),
             );
 
-            assert!(plugin1.parse_file(false).is_ok());
-            assert!(plugin2.parse_file(false).is_ok());
-            assert!(plugin3.parse_file(false).is_ok());
+            assert!(plugin1.parse_file(ParseMode::RecordIds).is_ok());
+            assert!(plugin2.parse_file(ParseMode::RecordIds).is_ok());
+            assert!(plugin3.parse_file(ParseMode::RecordIds).is_ok());
 
             assert_eq!(4, plugin1.overlap_size(&[&plugin2, &plugin3]));
         }
@@ -926,11 +926,11 @@ mod tests {
 
             assert_eq!(0, plugin1.overlap_size(&[&plugin2]));
 
-            assert!(plugin1.parse_file(false).is_ok());
+            assert!(plugin1.parse_file(ParseMode::RecordIds).is_ok());
 
             assert_eq!(0, plugin1.overlap_size(&[&plugin2]));
 
-            assert!(plugin2.parse_file(false).is_ok());
+            assert!(plugin2.parse_file(ParseMode::RecordIds).is_ok());
 
             assert_ne!(0, plugin1.overlap_size(&[&plugin2]));
         }
@@ -946,8 +946,8 @@ mod tests {
                 Path::new("testing-plugins/Morrowind/Data Files/Blank.esp"),
             );
 
-            assert!(plugin1.parse_file(false).is_ok());
-            assert!(plugin2.parse_file(false).is_ok());
+            assert!(plugin1.parse_file(ParseMode::RecordIds).is_ok());
+            assert!(plugin2.parse_file(ParseMode::RecordIds).is_ok());
 
             assert!(!plugin1.overlaps_with(&plugin2));
             assert_eq!(0, plugin1.overlap_size(&[&plugin2]));
@@ -1163,8 +1163,8 @@ mod tests {
                 Path::new("testing-plugins/Skyrim/Data/Blank - Master Dependent.esm"),
             );
 
-            assert!(plugin1.parse_file(false).is_ok());
-            assert!(plugin2.parse_file(false).is_ok());
+            assert!(plugin1.parse_file(ParseMode::RecordIds).is_ok());
+            assert!(plugin2.parse_file(ParseMode::RecordIds).is_ok());
 
             assert_eq!(4, plugin1.overlap_size(&[&plugin2, &plugin2]));
         }
@@ -1184,9 +1184,9 @@ mod tests {
                 Path::new("testing-plugins/Skyrim/Data/Blank - Master Dependent.esp"),
             );
 
-            assert!(plugin1.parse_file(false).is_ok());
-            assert!(plugin2.parse_file(false).is_ok());
-            assert!(plugin3.parse_file(false).is_ok());
+            assert!(plugin1.parse_file(ParseMode::RecordIds).is_ok());
+            assert!(plugin2.parse_file(ParseMode::RecordIds).is_ok());
+            assert!(plugin3.parse_file(ParseMode::RecordIds).is_ok());
 
             assert_eq!(2, plugin1.overlap_size(&[&plugin2, &plugin3]));
         }
@@ -1204,11 +1204,11 @@ mod tests {
 
             assert_eq!(0, plugin1.overlap_size(&[&plugin2]));
 
-            assert!(plugin1.parse_file(false).is_ok());
+            assert!(plugin1.parse_file(ParseMode::RecordIds).is_ok());
 
             assert_eq!(0, plugin1.overlap_size(&[&plugin2]));
 
-            assert!(plugin2.parse_file(false).is_ok());
+            assert!(plugin2.parse_file(ParseMode::RecordIds).is_ok());
 
             assert_ne!(0, plugin1.overlap_size(&[&plugin2]));
         }
@@ -1224,8 +1224,8 @@ mod tests {
                 Path::new("testing-plugins/Skyrim/Data/Blank.esp"),
             );
 
-            assert!(plugin1.parse_file(false).is_ok());
-            assert!(plugin2.parse_file(false).is_ok());
+            assert!(plugin1.parse_file(ParseMode::RecordIds).is_ok());
+            assert!(plugin2.parse_file(ParseMode::RecordIds).is_ok());
 
             assert!(!plugin1.overlaps_with(&plugin2));
             assert_eq!(0, plugin1.overlap_size(&[&plugin2]));
