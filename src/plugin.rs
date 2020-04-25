@@ -18,7 +18,8 @@
  */
 
 use std::fs::File;
-use std::io::{BufRead, BufReader, Seek};
+use std::io::{BufRead, BufReader, BufWriter, Seek, Write};
+use std::io;
 use std::path::{Path, PathBuf};
 use std::str;
 
@@ -121,6 +122,14 @@ impl Plugin {
             game_id,
             path: filepath.to_path_buf(),
             data: PluginData::default(),
+        }
+    }
+
+    pub fn new_with_contents(game_id: GameId, filepath: &Path, header_record: Record, entries: Vec<PluginEntry>) -> Plugin {
+        Plugin {
+            game_id,
+            path: filepath.to_path_buf(),
+            data: PluginData { header_record, record_ids: parse_record_ids_from_entries(game_id, &entries), entries },
         }
     }
 
@@ -376,6 +385,22 @@ impl Plugin {
 
     pub fn get_entries(&self) -> &Vec<PluginEntry> {
         &self.data.entries
+    }
+
+    pub fn write(&self) -> io::Result<()> {
+        let file = File::create(&self.path)?;
+        let mut writer = BufWriter::new(&file);
+
+        self.data.header_record.write(self.game_id, &mut writer)?;
+
+        for entry in self.data.entries.iter() {
+            match entry {
+                PluginEntry::Record(record) => record.write(self.game_id, &mut writer)?,
+                PluginEntry::Group(_) => unimplemented!(),
+            }
+        }
+        writer.flush()?;
+        Ok(())
     }
 }
 

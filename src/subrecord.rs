@@ -36,6 +36,8 @@ use nom::number::complete::{le_u16, le_u32};
 use nom::sequence::{pair, preceded, separated_pair, tuple};
 use nom::IResult;
 
+use std::io::Write;
+
 use crate::game_id::GameId;
 
 const SUBRECORD_TYPE_LENGTH: usize = 4;
@@ -49,7 +51,7 @@ pub struct Subrecord {
 }
 
 impl Subrecord {
-    pub fn new(
+    pub fn parse(
         input: &[u8],
         game_id: GameId,
         data_length_override: u32,
@@ -65,6 +67,14 @@ impl Subrecord {
                 is_compressed,
             },
         ))
+    }
+
+    pub fn new(subrecord_type: SubrecordType, data: Vec<u8>, is_compressed: bool) -> Self {
+        Subrecord {
+            subrecord_type,
+            data,
+            is_compressed,
+        }
     }
 
     #[cfg(feature = "compressed-fields")]
@@ -97,6 +107,14 @@ impl Subrecord {
 
     pub fn type_str(&self) -> Result<&str, Utf8Error> {
         std::str::from_utf8(&self.subrecord_type)
+    }
+
+    pub fn write<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        // TODO: Handle is_compressed = true
+        writer.write_all(&self.subrecord_type)?;
+        writer.write_all(&(self.data.len() as u32).to_le_bytes())?;
+        writer.write_all(&self.data)?;
+        Ok(())
     }
 }
 
