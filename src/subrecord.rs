@@ -35,6 +35,8 @@ use nom::number::complete::{le_u16, le_u32};
 use nom::sequence::{pair, preceded, separated_pair, tuple};
 use nom::IResult;
 
+use std::io::Write;
+
 use crate::game_id::GameId;
 
 const SUBRECORD_TYPE_LENGTH: usize = 4;
@@ -48,7 +50,7 @@ pub struct Subrecord {
 }
 
 impl Subrecord {
-    pub fn new(
+    pub fn parse(
         input: &[u8],
         game_id: GameId,
         data_length_override: u32,
@@ -64,6 +66,14 @@ impl Subrecord {
                 is_compressed,
             },
         ))
+    }
+
+    pub fn new(subrecord_type: SubrecordType, data: Vec<u8>, is_compressed: bool) -> Self {
+        Subrecord {
+            subrecord_type,
+            data,
+            is_compressed,
+        }
     }
 
     #[cfg(feature = "compressed-fields")]
@@ -92,6 +102,14 @@ impl Subrecord {
 
     pub fn data(&self) -> &[u8] {
         &self.data
+    }
+
+    pub fn write<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        // TODO: Handle is_compressed = true
+        writer.write_all(&self.subrecord_type)?;
+        writer.write_all(&(self.data.len() as u32).to_le_bytes())?;
+        writer.write_all(&self.data)?;
+        Ok(())
     }
 }
 
@@ -183,7 +201,7 @@ mod tests {
 
         #[test]
         fn parse_should_parse_a_subrecord_correctly() {
-            let subrecord = Subrecord::new(TES3_DATA_SUBRECORD, GameId::Morrowind, 0, false)
+            let subrecord = Subrecord::parse(TES3_DATA_SUBRECORD, GameId::Morrowind, 0, false)
                 .unwrap()
                 .1;
 
@@ -193,7 +211,7 @@ mod tests {
 
         #[test]
         fn parse_should_ignore_data_length_override_subrecords() {
-            let subrecord = Subrecord::new(TES3_DATA_SUBRECORD, GameId::Morrowind, 5, false)
+            let subrecord = Subrecord::parse(TES3_DATA_SUBRECORD, GameId::Morrowind, 5, false)
                 .unwrap()
                 .1;
 
@@ -222,7 +240,7 @@ mod tests {
 
         #[test]
         fn parse_should_parse_a_subrecord_with_no_data_length_override_correctly() {
-            let subrecord = Subrecord::new(TES4_CNAM_SUBRECORD, GameId::Skyrim, 0, false)
+            let subrecord = Subrecord::parse(TES4_CNAM_SUBRECORD, GameId::Skyrim, 0, false)
                 .unwrap()
                 .1;
 
@@ -232,35 +250,35 @@ mod tests {
 
         #[test]
         fn parse_should_use_data_length_override_if_non_zero() {
-            let subrecord = Subrecord::new(TES4_CNAM_SUBRECORD, GameId::Oblivion, 4, false)
+            let subrecord = Subrecord::parse(TES4_CNAM_SUBRECORD, GameId::Oblivion, 4, false)
                 .unwrap()
                 .1;
 
             assert_eq!(b"CNAM", &subrecord.subrecord_type);
             assert_eq!(&TES4_CNAM_SUBRECORD[6..10], subrecord.data.as_slice());
 
-            let subrecord = Subrecord::new(TES4_CNAM_SUBRECORD, GameId::Skyrim, 4, false)
+            let subrecord = Subrecord::parse(TES4_CNAM_SUBRECORD, GameId::Skyrim, 4, false)
                 .unwrap()
                 .1;
 
             assert_eq!(b"CNAM", &subrecord.subrecord_type);
             assert_eq!(&TES4_CNAM_SUBRECORD[6..10], subrecord.data.as_slice());
 
-            let subrecord = Subrecord::new(TES4_CNAM_SUBRECORD, GameId::Fallout3, 4, false)
+            let subrecord = Subrecord::parse(TES4_CNAM_SUBRECORD, GameId::Fallout3, 4, false)
                 .unwrap()
                 .1;
 
             assert_eq!(b"CNAM", &subrecord.subrecord_type);
             assert_eq!(&TES4_CNAM_SUBRECORD[6..10], subrecord.data.as_slice());
 
-            let subrecord = Subrecord::new(TES4_CNAM_SUBRECORD, GameId::FalloutNV, 4, false)
+            let subrecord = Subrecord::parse(TES4_CNAM_SUBRECORD, GameId::FalloutNV, 4, false)
                 .unwrap()
                 .1;
 
             assert_eq!(b"CNAM", &subrecord.subrecord_type);
             assert_eq!(&TES4_CNAM_SUBRECORD[6..10], subrecord.data.as_slice());
 
-            let subrecord = Subrecord::new(TES4_CNAM_SUBRECORD, GameId::Fallout4, 4, false)
+            let subrecord = Subrecord::parse(TES4_CNAM_SUBRECORD, GameId::Fallout4, 4, false)
                 .unwrap()
                 .1;
 
@@ -292,7 +310,7 @@ mod tests {
                 0x6b, 0x32, 0xb5, 0xdc, 0xa3, //field data (compressed)
             ];
 
-            let subrecord = Subrecord::new(DATA, GameId::Skyrim, 0, true).unwrap().1;
+            let subrecord = Subrecord::parse(DATA, GameId::Skyrim, 0, true).unwrap().1;
 
             let decompressed_data = subrecord.decompress_data().unwrap();
 
@@ -317,7 +335,7 @@ mod tests {
                 0x6b, 0x32, 0xb5, 0xdc, 0xa3, //field data (compressed)
             ];
 
-            let subrecord = Subrecord::new(DATA, GameId::Skyrim, 0, true).unwrap().1;
+            let subrecord = Subrecord::parse(DATA, GameId::Skyrim, 0, true).unwrap().1;
 
             assert!(subrecord.decompress_data().is_err());
         }
@@ -331,7 +349,7 @@ mod tests {
                 0x19, 0x00, //field data
             ];
 
-            let subrecord = Subrecord::new(DATA, GameId::Skyrim, 0, true).unwrap().1;
+            let subrecord = Subrecord::parse(DATA, GameId::Skyrim, 0, true).unwrap().1;
 
             assert!(subrecord.decompress_data().is_err());
         }

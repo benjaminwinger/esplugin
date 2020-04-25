@@ -43,6 +43,20 @@ pub struct RecordHeader {
 }
 
 impl RecordHeader {
+    pub fn new(
+        record_type: RecordType,
+        flags: u32,
+        form_id: Option<NonZeroU32>,
+        size_of_subrecords: u32,
+    ) -> Self {
+        RecordHeader {
+            record_type,
+            flags,
+            form_id,
+            size_of_subrecords,
+        }
+    }
+
     fn are_subrecords_compressed(&self) -> bool {
         (self.flags & 0x0004_0000) != 0
     }
@@ -59,6 +73,10 @@ pub struct Record {
 }
 
 impl Record {
+    pub fn new(header: RecordHeader, subrecords: Vec<Subrecord>) -> Self {
+        Record { header, subrecords }
+    }
+
     pub fn read_and_validate<T: io::Read>(
         reader: &mut T,
         game_id: GameId,
@@ -222,6 +240,42 @@ impl Record {
 
     pub fn subrecords(&self) -> &[Subrecord] {
         &self.subrecords
+    }
+
+    pub fn delete(&mut self) {
+        &self
+            .subrecords
+            .push(Subrecord::new(*b"DELE", 1i32.to_le_bytes().to_vec(), false));
+    }
+
+    pub fn write<W: io::Write>(&self, game_id: GameId, writer: &mut W) -> io::Result<()> {
+        writer.write_all(&self.header.record_type)?;
+        writer.write_all(&self.header.size_of_subrecords.to_le_bytes())?;
+        if game_id == GameId::Morrowind {
+            // Always zero
+            writer.write_all(&[0; 4])?;
+        }
+        writer.write_all(&self.header.flags.to_le_bytes())?;
+        if game_id != GameId::Morrowind {
+            writer.write_all(
+                &self
+                    .header
+                    .form_id
+                    .map(|x| x.get())
+                    .unwrap_or(0)
+                    .to_le_bytes(),
+            )?;
+            // FIXME: Values aren't stored, so we can't write them
+            writer.write_all(&[0; 4])?;
+            if game_id != GameId::Oblivion {
+                writer.write_all(&[0; 4])?;
+            }
+        }
+        for subrecord in self.subrecords.iter() {
+            subrecord.write(writer)?;
+        }
+
+        Ok(())
     }
 }
 
@@ -406,7 +460,7 @@ fn parse_subrecords(
 
     while !input1.is_empty() {
         let (input2, subrecord) =
-            Subrecord::new(input1, game_id, large_subrecord_size, are_compressed)?;
+            Subrecord::parse(input1, game_id, large_subrecord_size, are_compressed)?;
 
         if subrecord.subrecord_type() == b"XXXX" {
             large_subrecord_size = parse_subrecord_data_as_u32(input1)?.1;
