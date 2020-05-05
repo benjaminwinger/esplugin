@@ -387,6 +387,10 @@ impl Plugin {
         &self.data.entries
     }
 
+    pub fn into_entries(self) -> Vec<PluginEntry> {
+        self.data.entries
+    }
+
     pub fn write(&self) -> io::Result<()> {
         let file = File::create(&self.path)?;
         let mut writer = BufWriter::new(&file);
