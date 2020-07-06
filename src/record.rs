@@ -237,6 +237,10 @@ impl Record {
         &self.subrecords
     }
 
+    pub fn delete(&mut self) {
+        &self.subrecords.push(Subrecord::new(*b"DELE", 1i32.to_le_bytes().to_vec(), false));
+    }
+
     pub fn write<W: io::Write>(&self, game_id: GameId, writer: &mut W) -> io::Result<()> {
         writer.write_all(&self.header.record_type)?;
         writer.write_all(&self.header.size_of_subrecords.to_le_bytes())?;
